@@ -1,0 +1,184 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WebRTC Receive Audio</title>
+        <meta charset="UTF-8">
+
+        <script type="text/javascript">
+
+        const url = "ws://localhost:8081/"
+        var pc, ws;
+
+        async function start() {
+
+            closePeer();
+
+            // Add local audio track for microphone input in the browser
+            const ms = await navigator.mediaDevices.getUserMedia({audio: true});
+
+            ws = new WebSocket(url, []);
+
+            ws.onopen = function () {
+                console.log("web socket onopen.");
+
+                pc = new RTCPeerConnection({
+                    sdpSemantics: 'unified-plan'
+                });
+                // 添加音频 transceiver
+                // pc.addTransceiver('audio', { direction: 'sendrecv' });
+                // Set up to play remote audio from the model
+                const audioElement = document.createElement("audio");
+                audioElement.autoplay = true;
+                pc.ontrack = (e) => (audioElement.current.srcObject = e.streams[0]);
+
+                // const offer = await pc.createOffer();
+                // console.log("Offer SDP: " + offer.sdp);
+                pc.addTrack(ms.getTracks()[0]);
+
+                // ms.getTracks().forEach(track => {
+                //     console.log('add local track ' + track.kind + ' to peer connection.');
+                //     console.log(track);
+                //     pc.addTrack(track, ms);
+                // });
+
+                pc.onicegatheringstatechange = function () {
+                    console.log("onicegatheringstatechange: " + pc.iceGatheringState);
+                }
+                pc.oniceconnectionstatechange = function () {
+                    console.log("oniceconnectionstatechange: " + pc.iceConnectionState);
+                }
+                pc.onsignalingstatechange = function () {
+                    console.log("onsignalingstatechange: " + pc.signalingState);
+                }
+                pc.onicecandidate = function (event) {
+                    if (event.candidate) {
+                        console.log('new-ice-candidate:');
+                        console.log(event.candidate.candidate);
+                        console.log(event.candidate);
+                        //console.log(pc.localDescription.sdp);
+                        ws.send(event.candidate.candidate);
+                    }
+                };
+            };
+
+            ws.onmessage = async function (evt) {
+                // Received SDP offer from the remote web socket server.
+                console.log("web socket onmessage: " + evt.data + ".");
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: evt.data }))
+
+                // Now create our offer SDP to send back to the web socket server.
+                pc.createAnswer().then(function (answer) {
+                    return pc.setLocalDescription(answer);
+                }).then(function () {
+                    console.log("Sending answer SDP.");
+                    console.log("SDP: " + pc.localDescription.sdp);
+                    audioFormats = getAudioFormatsFromSDP(pc.localDescription.sdp);
+                    console.log(audioFormats);
+
+                    ws.send(pc.localDescription.sdp);
+                });
+            };
+        };
+
+        // 优先考虑指定编解码器的函数
+        function preferCodec(sdp, mimeType) {
+            const lines = sdp.split('\r\n');
+            const codecList = [];
+            let preferredCodecPayloadType = null;
+
+            for (const line of lines) {
+                if (line.startsWith('a=rtpmap:')) {
+                    const parts = line.split(' ');
+                    const payloadType = parts[0].split(':')[1];
+                    const codecName = parts[1].split('/')[0];
+                    if (codecName === mimeType.split('/')[1]) {
+                        preferredCodecPayloadType = payloadType;
+                        break;
+                    }
+                }
+            }
+
+            if (preferredCodecPayloadType) {
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].startsWith('m=audio')) {
+                        const parts = lines[i].split(' ');
+                        const payloadTypes = parts.slice(3);
+                        const index = payloadTypes.indexOf(preferredCodecPayloadType);
+                        if (index > -1) {
+                            payloadTypes.splice(index, 1);
+                            payloadTypes.unshift(preferredCodecPayloadType);
+                            lines[i] = parts.slice(0, 3).concat(payloadTypes).join(' ');
+                        }
+                    }
+                }
+            }
+
+            return lines.join('\r\n');
+        }
+
+        function closePeer() {
+            //let stm = document.querySelector('#videoCtl').srcObject;
+            //if (stm != null) {
+
+            //    stm.getTracks().forEach((trk) => {
+            //        console.log(`stopping track ${trk.id} kind ${trk.kind} readyState ${trk.readyState}.`);
+            //        console.log(trk);
+            //        trk.stop();
+            //    });
+            //}
+
+            if (ws != null) {
+                console.log("closing web socket.");
+                ws.close();
+            }
+
+            if (pc != null) {
+                console.log("close peer");
+                pc.close();
+            }
+        };
+
+        function getAudioFormatsFromSDP(sdp) {
+            const audioFormats = [];
+            const lines = sdp.split('\r\n');
+            let currentPayloadType = null;
+
+            lines.forEach(line => {
+                if (line.startsWith('m=audio')) {
+                    const parts = line.split(' ');
+                    for (let i = 3; i < parts.length; i++) {
+                        audioFormats.push({ payloadType: parts[i] });
+                    }
+                } else if (line.startsWith('a=rtpmap:')) {
+                    const parts = line.split(' ');
+                    const payloadType = parts[0].split(':')[1];
+                    const codecInfo = parts[1].split('/');
+                    const codec = codecInfo[0];
+                    const sampleRate = codecInfo[1];
+                    const channels = codecInfo[2] || '1';
+                    const format = audioFormats.find(f => f.payloadType === payloadType);
+                    if (format) {
+                        format.codec = codec;
+                        format.sampleRate = sampleRate;
+                        format.channels = channels;
+                    }
+                }
+            });
+
+            return audioFormats;
+        }
+
+    </script>
+    </head>
+    <body>
+
+        <div>
+            <button type="button" class="btn btn-success"
+                onclick="start();">Start</button>
+            <button type="button" class="btn btn-success"
+                onclick="closePeer();">Close</button>
+        </div>
+
+    </body>
+</html>

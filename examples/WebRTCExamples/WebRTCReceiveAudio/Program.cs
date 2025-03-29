@@ -68,7 +68,7 @@ namespace demo
 
         private static WebSocketServer _webSocketServer;
 
-        static void Main()
+        static void Main1()
         {
             Console.WriteLine("WebRTC Server Sample Program");
             Console.WriteLine("Press ctrl-c to exit.");
@@ -141,7 +141,7 @@ namespace demo
 
             peerConnection.OnRtpPacketReceived += (IPEndPoint rep, SDPMediaTypesEnum media, RTPPacket rtpPkt) =>
             {
-                //logger.LogDebug($"RTP {media} pkt received, SSRC {rtpPkt.Header.SyncSource}.");
+                logger.LogDebug($"RTP {media} pkt received, SSRC {rtpPkt.Header.SyncSource}.");
 
                 if (media == SDPMediaTypesEnum.audio)
                 {

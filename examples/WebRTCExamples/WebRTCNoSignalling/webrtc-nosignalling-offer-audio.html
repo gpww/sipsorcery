@@ -1,0 +1,98 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WebRTC No Signalling</title>
+        <meta charset="UTF-8">
+
+        <script type="text/javascript">
+
+        var pc;
+
+        async function start() {
+
+           // Create a peer connection
+            pc = new RTCPeerConnection({
+                sdpSemantics: 'unified-plan'
+            });
+            // 添加音频 transceiver
+            pc.addTransceiver('audio', { direction: 'sendrecv' });
+
+            // Set up to play remote audio from the model
+            const audioElement = document.createElement("audio");
+            audioElement.autoplay = true;
+            pc.ontrack = (e) => (audioElement.current.srcObject = e.streams[0]);
+
+            // Add local audio track for microphone input in the browser
+            const ms = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            pc.addTrack(ms.getTracks()[0]);
+
+            pc.onicegatheringstatechange = function () {
+                console.log("onicegatheringstatechange: " + pc.iceGatheringState);
+            }
+            pc.oniceconnectionstatechange = function () {
+                console.log("oniceconnectionstatechange: " + pc.iceConnectionState);
+            }
+            pc.onsignalingstatechange = function () {
+                console.log("onsignalingstatechange: " + pc.signalingState);
+            }
+            pc.onicecandidate = function (event) {
+                if (event.candidate) {
+                    console.log('new-ice-candidate:');
+                    console.log(event.candidate.candidate);
+                    console.log(event.candidate);
+                }
+            };
+
+            const offer = await pc.createOffer();
+            console.log("Offer SDP: " + offer.sdp);
+            // 修改SDP中的Opus编码器为单通道
+            // var newSdp = offer.sdp.replace(/opus\/48000\/2/g, 'opus/48000/1');
+            // newSdp = newSdp.replace(/a=fmtp:111 minptime=10;useinbandfec=1/g, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=0;sprop-stereo=0');
+            // console.log("Modified Offer SDP: " + newSdp);
+			pc.setLocalDescription(offer);
+            document.getElementById('localSessionDescription').value = btoa(JSON.stringify(offer))
+		};	
+
+        async function answer(remoteAnswer) {
+            const jsonAnswer = JSON.parse(atob(remoteAnswer));
+            console.log("remoteAnswer: ");
+            console.log(jsonAnswer);
+            pc.setRemoteDescription(new RTCSessionDescription(jsonAnswer))
+        }
+        function closePeer() {
+            if (pc != null) {
+                console.log("close peer");
+                pc.close();
+            }
+        };
+
+    </script>
+    </head>
+    <body>
+
+        <h3>Local SDP offer will appear here (as a base64 string)</h3>
+        <textarea id="localSessionDescription" readonly="true" rows="10"
+            cols="80"
+            title="Remote SDP Offer"
+            placeholder="Local SDP offer will appear here"></textarea> <br />
+        <button type="button" class="btn btn-success"
+            onclick="start();">Get</button>
+
+        <h3>Remote SDP Answer paste here (as a base64 string)</h3>
+        <textarea id="remoteAnswer" rows="10" cols="80"
+            title="Remote SDP Answer"
+            placeholder="Remote SDP answer will paste here"></textarea> <br />
+        <button type="button" class="btn btn-success"
+            onclick="answer(document.getElementById('remoteAnswer').value);">Start</button>
+
+        <button type="button" class="btn btn-success"
+            onclick="closePeer();">Close</button>
+    </body>

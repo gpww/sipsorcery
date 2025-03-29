@@ -3,7 +3,7 @@ using System.Linq;
 
 namespace SIPSorcery.Media
 {
-    internal static class PcmResampler
+    public static class PcmResampler
     {
         public static short[] Resample(short[] pcm, int inRate, int outRate)
         {

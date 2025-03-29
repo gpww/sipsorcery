@@ -15,7 +15,7 @@
         const STUN_URL = "stun:stun.sipsorcery.com";
         const WEBSOCKET_URL = "ws://127.0.0.1:8081/";
         const WEBSOCKET_MAKEOFFER_URL = "ws://127.0.0.1:8081/?role=offer";
-        const DATA_CHANNEL_LABEL = "dc1";
+        const DATA_CHANNEL_LABEL = "oai-events";
         const RANDOM_BYTE_LENGTH = 10000;
         const HASH_INPUT_MAX_LEN = 65535;
 
@@ -30,7 +30,8 @@
             }
             isClosed = false;
 
-            pc = new RTCPeerConnection({ iceServers: [{ urls: STUN_URL }] });
+            pc = new RTCPeerConnection();
+            // pc = new RTCPeerConnection({ iceServers: [{ urls: STUN_URL }] });
 
             pc.onicecandidate = evt => evt.candidate && ws.send(JSON.stringify(evt.candidate));
 
@@ -163,19 +164,26 @@
 </head>
 <body>
     <div>
-        <input type="checkbox" id="makeoffer" name="makfeoffer" value="makeoffer" onchange="seturl();"> Make Offer 
+        <input type="checkbox" id="makeoffer" name="makfeoffer"
+            value="makeoffer" onchange="seturl();"> Make Offer
         <input type="text" id="websockurl" size="40" />
-        <button type="button" class="btn btn-success" onclick="start();">Open</button>
-        <button type="button" class="btn btn-success" onclick="closePeer();">Close</button>
+        <button type="button" class="btn btn-success"
+            onclick="start();">Open</button>
+        <button type="button" class="btn btn-success"
+            onclick="closePeer();">Close</button>
     </div>
 
     <div>
         <input type="text" id="message" value="hello world" />
-        <button type="button" class="btn btn-success" onclick="sendMessage(document.querySelector('#message').value);">Send Message</button>
+        <button type="button" class="btn btn-success"
+            onclick="sendMessage(document.querySelector('#message').value);">Send
+            Message</button>
     </div>
 
     <div>
-        <input type="text" id="rndByteLength" /><button type="button" class="btn btn-success" onclick="sendRandomEcho();">Send Random Echo</button>
+        <input type="text" id="rndByteLength" /><button type="button"
+            class="btn btn-success" onclick="sendRandomEcho();">Send Random
+            Echo</button>
     </div>
 </body>
 

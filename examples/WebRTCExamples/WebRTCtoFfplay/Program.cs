@@ -195,7 +195,7 @@ namespace SIPSorcery.Examples
                 {
                     logger.LogDebug("Creating RTP session for ffplay.");
 
-                    var rtpSession = CreateRtpSession(pc.AudioLocalTrack?.Capabilities,                       pc.VideoLocalTrack?.Capabilities);
+                    var rtpSession = CreateRtpSession(pc.AudioLocalTrack?.Capabilities, pc.VideoLocalTrack?.Capabilities);
                     pc.OnRtpPacketReceived += (rep, media, rtpPkt) =>
                     {
                         if (media == SDPMediaTypesEnum.audio && rtpSession.AudioDestinationEndPoint != null)

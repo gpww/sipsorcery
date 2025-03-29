@@ -1,0 +1,93 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WebRTC No Signalling</title>
+        <meta charset="UTF-8">
+
+        <script type="text/javascript">
+
+        var pc;
+
+        async function start(remoteOffer) {
+
+           // Create a peer connection
+            pc = new RTCPeerConnection({
+                sdpSemantics: 'unified-plan'
+            });
+            // 添加音频 transceiver
+            // pc.addTransceiver('audio', { direction: 'sendrecv' });
+
+            // Set up to play remote audio from the model
+            const audioElement = document.createElement("audio");
+            audioElement.autoplay = true;
+            pc.ontrack = (e) => (audioElement.current.srcObject = e.streams[0]);
+
+            // Add local audio track for microphone input in the browser
+            const ms = await navigator.mediaDevices.getUserMedia({audio: true});
+            pc.addTrack(ms.getTracks()[0]);
+
+            pc.onicegatheringstatechange = function () {
+                console.log("onicegatheringstatechange: " + pc.iceGatheringState);
+            }
+            pc.oniceconnectionstatechange = function () {
+                console.log("oniceconnectionstatechange: " + pc.iceConnectionState);
+            }
+            pc.onsignalingstatechange = function () {
+                console.log("onsignalingstatechange: " + pc.signalingState);
+            }
+            pc.onicecandidate = function (event) {
+                if (event.candidate) {
+                    console.log('new-ice-candidate:');
+                    console.log(event.candidate.candidate);
+                    console.log(event.candidate);
+                }
+            };
+
+            const jsonOffer = JSON.parse(atob(remoteOffer));
+            console.log("jsonOffer: ");
+            console.log(jsonOffer);
+            pc.setRemoteDescription(new RTCSessionDescription(jsonOffer))
+
+			//// Create the answer SDP.
+            pc.createAnswer().then(function (answer) {
+                console.log("answer SDP: " + answer.sdp);
+                pc.setLocalDescription(answer).then(() => {
+                    console.log("pc.localDescription: ");
+                    console.log(pc.localDescription);
+                    document.getElementById('localAnswer').value = btoa(JSON.stringify(pc.localDescription));
+                }).catch(error => {
+                    console.error("Failed to set local description: ", error);
+                });
+            }).catch(error => {
+                console.error("Failed to create answer: ", error);
+            });
+		};	
+
+        function closePeer() {
+            if (pc != null) {
+                console.log("close peer");
+                pc.close();
+            }
+        };
+
+    </script>
+    </head>
+    <body>
+
+        <h3>Paste in Remote SDP Offer (as a base64 string)</h3>
+        <textarea id="remoteOffer" rows="10" cols="80" title="Remote SDP Offer"
+            placeholder="Paste the remote SDP offer here"></textarea> <br />
+        <button type="button" class="btn btn-success"
+            onclick="start(document.getElementById('remoteOffer').value);">Start</button>
+
+        <h3>Local SDP Answer will appear here (as a base64 string)</h3>
+        <textarea id="localAnswer" readonly="true" rows="10" cols="80"
+            title="Local SDP Answer"
+            placeholder="Local SDP answer will appear here"></textarea> <br />
+
+        <button type="button" class="btn btn-success"
+            onclick="closePeer();">Close</button>
+
+    </body>

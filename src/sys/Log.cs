@@ -1,4 +1,4 @@
-//----------------------------------------------------------------------------
+﻿//----------------------------------------------------------------------------
 // File Name: Log.cs
 // 
 // Description: 
@@ -38,7 +38,6 @@ namespace SIPSorcery.Sys
                 {
                     _logger = SIPSorcery.LogFactory.CreateLogger(LOG_CATEGORY);
                 }
-
                 return _logger;
             }
             set

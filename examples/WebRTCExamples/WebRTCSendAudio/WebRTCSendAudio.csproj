@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+      <LangVersion>12.0</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -11,14 +12,25 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageReference Include="Serilog.Extensions.Logging" Version="3.0.1" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
     <PackageReference Include="SIPSorcery.WebSocketSharp" Version="0.0.1" />
     <PackageReference Include="SIPSorceryMedia.Windows" Version="6.0.5" />
   </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\..\..\..\AzureSDK\SpeechHelper\SpeechHelper.csproj" />
         <ProjectReference Include="..\..\..\src\SIPSorcery.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Update="Macroform_-_Simplicity.raw">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="test.wav">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="唐僧.wav">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
 </Project>

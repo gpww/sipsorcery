@@ -11,21 +11,33 @@
 
             closePeer();
 
-            let audioControl = document.querySelector('#audioCtl');
+            //判断浏览器是否支持这些 API
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                alert("浏览器不支持获取音频设备！");
+            }
 
-            //const constraints = {
-            //    'video': true,
-            //    'audio': true
-            //}
-
-            const localStream = await navigator.mediaDevices.getUserMedia({ video:false, audio: true });
+            const localStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
 
             ws = new WebSocket(url, []);
 
             ws.onopen = function () {
                 console.log("web socket onopen.");
 
-                pc = new RTCPeerConnection(null);
+                pc = new RTCPeerConnection({
+                    sdpSemantics: 'unified-plan'
+                });
+                // 添加音频 transceiver
+                // pc.addTransceiver('audio', { direction: 'sendrecv' });
+                // Set up to play remote audio from the model
+                const audioElement = document.createElement("audio");
+                audioElement.autoplay = true;
+                pc.ontrack = (e) => (audioElement.current.srcObject = e.streams[0]);
 
                 localStream.getTracks().forEach(track => {
                     console.log('add local track ' + track.kind + ' to peer connection.');
@@ -37,15 +49,12 @@
                 pc.onicegatheringstatechange = function () {
                     console.log("onicegatheringstatechange: " + pc.iceGatheringState);
                 }
-
                 pc.oniceconnectionstatechange = function () {
                     console.log("oniceconnectionstatechange: " + pc.iceConnectionState);
                 }
-
                 pc.onsignalingstatechange = function () {
                     console.log("onsignalingstatechange: " + pc.signalingState);
                 }
-
                 pc.onicecandidate = function (event) {
                     if (event.candidate) {
                         console.log('new-ice-candidate:');
@@ -100,8 +109,10 @@
 <body>
 
     <div>
-        <button type="button" class="btn btn-success" onclick="start();">Start</button>
-        <button type="button" class="btn btn-success" onclick="closePeer();">Close</button>
+        <button type="button" class="btn btn-success"
+            onclick="start();">Start</button>
+        <button type="button" class="btn btn-success"
+            onclick="closePeer();">Close</button>
     </div>
 
 </body>

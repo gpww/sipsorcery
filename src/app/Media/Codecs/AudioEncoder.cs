@@ -251,5 +251,53 @@ namespace SIPSorcery.Media
             }
             return (short)value;
         }
+
+        public static byte[] ShortsToBytes(short[] input)
+        {
+            return ShortsToBytes(input, 0, input.Length);
+        }
+        /// <summary>
+        /// Converts linear short samples into interleaved byte samples, for writing to a file, waveout device, etc.
+        /// </summary>
+        /// <param name="input"></param>
+        /// <returns></returns>
+        public static byte[] ShortsToBytes(short[] input, int offset, int length)
+        {
+            byte[] processedValues = new byte[length * 2];
+            for (int c = 0; c < length; c++)
+            {
+                processedValues[c * 2] = (byte)(input[c + offset] & 0xFF);
+                processedValues[c * 2 + 1] = (byte)((input[c + offset] >> 8) & 0xFF);
+            }
+
+            return processedValues;
+        }
+
+        public static short[] BytesToShorts(byte[] input)
+        {
+            return BytesToShorts(input, 0, input.Length);
+        }
+        /// <summary>
+        /// Converts interleaved byte samples into linear short samples.
+        /// </summary>
+        /// <param name="input">The byte array to convert.</param>
+        /// <param name="offset">The starting offset in the byte array.</param>
+        /// <param name="length">The number of bytes to convert.</param>
+        /// <returns>A short array containing the converted samples.</returns>
+        public static short[] BytesToShorts(byte[] input, int offset, int length)
+        {
+            if (length % 2 != 0)
+            {
+                throw new ArgumentException("The length of the byte array must be even.");
+            }
+
+            short[] processedValues = new short[length / 2];
+            for (int i = 0; i < processedValues.Length; i++)
+            {
+                processedValues[i] = (short)(input[offset + i * 2] | (input[offset + i * 2 + 1] << 8));
+            }
+
+            return processedValues;
+        }
     }
 }
