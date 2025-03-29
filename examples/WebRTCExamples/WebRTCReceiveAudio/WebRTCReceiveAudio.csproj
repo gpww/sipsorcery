@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="SIPSorcery.WebSocketSharp" Version="0.0.1" />
-    <PackageReference Include="SIPSorceryMedia.Windows" Version="6.0.5" />
+    <PackageReference Include="SIPSorceryMedia.Windows" Version="8.0.7" />
   </ItemGroup>
 
     <ItemGroup>

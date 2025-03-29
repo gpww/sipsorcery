@@ -20,21 +20,20 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
+using SIPSorcery.net.RTP.Packetisation;
 using SIPSorcery.Net;
 using SIPSorcery.Sys;
 using SIPSorceryMedia.Abstractions;
 
-namespace SIPSorcery.net.RTP
+namespace SIPSorcery.Net
 {
     public class VideoStream : MediaStream
     {
         protected static ILogger logger = Log.Logger;
         protected RtpVideoFramer RtpVideoFramer;
 
-        private SDPAudioVideoMediaFormat sendingFormat;
+        private VideoFormat sendingFormat;
         private bool sendingFormatFound = false;
-
-        #region EVENTS
 
         /// <summary>
         /// Gets fired when the remote SDP is received and the set of common video formats is set.
@@ -53,10 +52,6 @@ namespace SIPSorcery.net.RTP
         /// </remarks>
         public event Action<int, IPEndPoint, uint, byte[], VideoFormat> OnVideoFrameReceivedByIndex;
 
-        #endregion EVENTS
-
-        #region PROPERTIES
-
         /// <summary>
         /// Indicates whether this session is using video.
         /// </summary>
@@ -74,11 +69,6 @@ namespace SIPSorcery.net.RTP
         /// process.
         /// </summary>
         public int MaxReconstructedVideoFrameSize { get; set; } = 1048576;
-
-
-        #endregion PROPERTIES
-
-        #region SEND PACKET
 
         /// <summary>
         /// Helper method to send a low quality JPEG image over RTP. This method supports a very abbreviated version of RFC 2435 "RTP Payload Format for JPEG-compressed Video".
@@ -115,7 +105,7 @@ namespace SIPSorcery.net.RTP
                 }
                 catch (SocketException sockExcp)
                 {
-                    logger.LogError("SocketException SendJpegFrame. " + sockExcp.Message);
+                    logger.LogError(sockExcp, "SocketException SendJpegFrame. {ErrorMessage}", sockExcp.Message);
                 }
             }
         }
@@ -140,7 +130,7 @@ namespace SIPSorcery.net.RTP
             {
                 foreach (var nal in H264Packetiser.ParseNals(accessUnit))
                 {
-                    SendH264Nal(duration, payloadTypeID, nal.NAL, nal.IsLast);
+                    SendH26XNal(duration, payloadTypeID, nal.NAL, nal.IsLast);
                 }
             }
         }
@@ -153,12 +143,12 @@ namespace SIPSorcery.net.RTP
         /// <param name="nal">The buffer containing the NAL to send.</param>
         /// <param name="isLastNal">Should be set for the last NAL in the H264 access unit. Determines when the markbit gets set 
         /// and the timestamp incremented.</param>
-        private void SendH264Nal(uint duration, int payloadTypeID, byte[] nal, bool isLastNal)
+        private void SendH26XNal(uint duration, int payloadTypeID, byte[] nal, bool isLastNal, bool is265 = false)
         {
             //logger.LogDebug($"Send NAL {nal.Length}, is last {isLastNal}, timestamp {videoTrack.Timestamp}.");
             //logger.LogDebug($"nri {nalNri:X2}, type {nalType:X2}.");
-
-            byte nal0 = nal[0];
+            var naluHeaderSize = is265 ? 2 : 1;
+            byte[] naluHeader = is265 ? nal.Take(2).ToArray() : nal.Take(1).ToArray();
 
             if (nal.Length <= RTPSession.RTP_MAX_PAYLOAD)
             {
@@ -167,13 +157,16 @@ namespace SIPSorcery.net.RTP
                 int markerBit = isLastNal ? 1 : 0;   // There is only ever one packet in a STAP-A.
                 Buffer.BlockCopy(nal, 0, payload, 0, nal.Length);
 
+                //For TWCC
+                SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
+
                 SendRtpRaw(payload, LocalTrack.Timestamp, markerBit, payloadTypeID, true);
                 //logger.LogDebug($"send H264 {videoChannel.RTPLocalEndPoint}->{dstEndPoint} timestamp {videoTrack.Timestamp}, payload length {payload.Length}, seqnum {videoTrack.SeqNum}, marker {markerBit}.");
                 //logger.LogDebug($"send H264 {videoChannel.RTPLocalEndPoint}->{dstEndPoint} timestamp {videoTrack.Timestamp}, STAP-A {h264RtpHdr.HexStr()}, payload length {payload.Length}, seqnum {videoTrack.SeqNum}, marker {markerBit}.");
             }
             else
             {
-                nal = nal.Skip(1).ToArray();
+                nal = nal.Skip(naluHeaderSize).ToArray();
 
                 // Send as Fragmentation Unit A (FU-A):
                 for (int index = 0; index * RTPSession.RTP_MAX_PAYLOAD < nal.Length; index++)
@@ -185,11 +178,14 @@ namespace SIPSorcery.net.RTP
                     bool isFinalPacket = (index + 1) * RTPSession.RTP_MAX_PAYLOAD >= nal.Length;
                     int markerBit = (isLastNal && isFinalPacket) ? 1 : 0;
 
-                    byte[] h264RtpHdr = H264Packetiser.GetH264RtpHeader(nal0, isFirstPacket, isFinalPacket);
+                    byte[] rtpHdr = is265 ? H265Packetiser.GetH265RtpHeader(naluHeader, isFirstPacket, isFinalPacket) : H264Packetiser.GetH264RtpHeader(naluHeader[0], isFirstPacket, isFinalPacket);
+                    
+                    byte[] payload = new byte[payloadLength + rtpHdr.Length];
+                    Buffer.BlockCopy(rtpHdr, 0, payload, 0, rtpHdr.Length);
+                    Buffer.BlockCopy(nal, offset, payload, rtpHdr.Length, payloadLength);
 
-                    byte[] payload = new byte[payloadLength + h264RtpHdr.Length];
-                    Buffer.BlockCopy(h264RtpHdr, 0, payload, 0, h264RtpHdr.Length);
-                    Buffer.BlockCopy(nal, offset, payload, h264RtpHdr.Length, payloadLength);
+                    //For TWCC
+                    SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
 
                     SendRtpRaw(payload, LocalTrack.Timestamp, markerBit, payloadTypeID, true);
                     //logger.LogDebug($"send H264 {videoChannel.RTPLocalEndPoint}->{dstEndPoint} timestamp {videoTrack.Timestamp}, FU-A {h264RtpHdr.HexStr()}, payload length {payloadLength}, seqnum {videoTrack.SeqNum}, marker {markerBit}.");
@@ -199,6 +195,19 @@ namespace SIPSorcery.net.RTP
             if (isLastNal)
             {
                 LocalTrack.Timestamp += duration;
+            }
+        }
+
+        public void SendH265Frame(uint durationRtpUnits, int payloadID, byte[] sample)
+        {
+            if(CheckIfCanSendRtpRaw())
+            {
+                var nals = H265Packetiser.ParseNals(sample);
+                var aggregatedNals = H265Packetiser.CreateAggregated(nals, RTPSession.RTP_MAX_PAYLOAD);
+                foreach (var nal in aggregatedNals)
+                {
+                    SendH26XNal(durationRtpUnits, payloadID, nal.NAL, nal.IsLast, true);
+                }
             }
         }
 
@@ -227,15 +236,59 @@ namespace SIPSorcery.net.RTP
 
                         int markerBit = ((offset + payloadLength) >= buffer.Length) ? 1 : 0; // Set marker bit for the last packet in the frame.
 
+                        SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
                         SendRtpRaw(payload, LocalTrack.Timestamp, markerBit, payloadTypeID, true);
-                        //logger.LogDebug($"send VP8 {videoChannel.RTPLocalEndPoint}->{dstEndPoint} timestamp {videoTrack.Timestamp}, sample length {buffer.Length}.");
                     }
-
                     LocalTrack.Timestamp += duration;
                 }
                 catch (SocketException sockExcp)
                 {
-                    logger.LogError("SocketException SendVp8Frame. " + sockExcp.Message);
+                    logger.LogError(sockExcp, "SocketException SendVp8Frame.");
+                }
+            }
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="durationRtpUnits"></param>
+        /// <param name="payloadID"></param>
+        /// <param name="sample"></param>
+        public void SendMJPEGFrame(uint durationRtpUnits, int payloadID, byte[] sample)
+        {
+            if (CheckIfCanSendRtpRaw())
+            {
+                try
+                {
+                    var frameData = MJPEGPacketiser.GetFrameData(sample, out var customData);
+
+                    var rtpHeader = MJPEGPacketiser.GetMJPEGRTPHeader(customData, 0);
+                    if (rtpHeader.Length + frameData.Data.Length <= RTPSession.RTP_MAX_PAYLOAD)
+                    {
+                        var payload = rtpHeader.Concat(frameData.Data).ToArray();
+                        SendRtpRaw(payload, LocalTrack.Timestamp, 1, payloadID, true);
+                    }
+                    else
+                    {
+                        var restBytes = frameData.Data;
+                        var offset = 0;
+                        while (restBytes.Length > 0)
+                        {
+                            var dataSize = RTPSession.RTP_MAX_PAYLOAD - rtpHeader.Length;
+                            var isLast = dataSize >= restBytes.Length;
+                            var data = isLast ? restBytes : restBytes.Take(dataSize).ToArray();
+                            var markerBit = isLast ? 0 : 1;
+                            var payload = rtpHeader.Concat(data).ToArray();
+                            SendRtpRaw(payload, LocalTrack.Timestamp, markerBit, payloadID, true);
+
+                            offset += RTPSession.RTP_MAX_PAYLOAD;
+                            rtpHeader = MJPEGPacketiser.GetMJPEGRTPHeader(customData, offset);
+                            restBytes = restBytes.Skip(data.Length).ToArray();
+                        }
+                    }
+                }
+                catch (SocketException sockExcp)
+                {
+                    logger.LogError("SocketException SendMJEPGFrame. " + sockExcp.Message);
                 }
             }
         }
@@ -251,28 +304,30 @@ namespace SIPSorcery.net.RTP
         {
             if (!sendingFormatFound)
             {
-                sendingFormat = GetSendingFormat();
+                sendingFormat = GetSendingFormat().ToVideoFormat();
                 sendingFormatFound = true;
             }
 
-            int payloadID = Convert.ToInt32(sendingFormat.ID);
+            int payloadID = sendingFormat.FormatID;
 
-            switch (sendingFormat.Name())
+            switch (sendingFormat.Codec)
             {
-                case "VP8":
+                case VideoCodecsEnum.VP8:
                     SendVp8Frame(durationRtpUnits, payloadID, sample);
                     break;
-                case "H264":
+                case VideoCodecsEnum.H264:
                     SendH264Frame(durationRtpUnits, payloadID, sample);
                     break;
+                case VideoCodecsEnum.H265:
+                    SendH265Frame(durationRtpUnits, payloadID, sample);
+                    break;
+                case VideoCodecsEnum.JPEG:
+                    SendMJPEGFrame(durationRtpUnits, payloadID, sample);
+                    break;
                 default:
-                    throw new ApplicationException($"Unsupported video format selected {sendingFormat.Name()}.");
+                    throw new ApplicationException($"Unsupported video format selected {sendingFormat.FormatName}.");
             }
         }
-
-        #endregion SEND PACKET
-
-        #region RECEIVE PACKET
 
         public void ProcessVideoRtpFrame(IPEndPoint endpoint, RTPPacket packet, SDPAudioVideoMediaFormat format)
         {
@@ -292,9 +347,11 @@ namespace SIPSorcery.net.RTP
             else
             {
                 if (format.ToVideoFormat().Codec == VideoCodecsEnum.VP8 ||
-                    format.ToVideoFormat().Codec == VideoCodecsEnum.H264)
+                    format.ToVideoFormat().Codec == VideoCodecsEnum.H264 ||
+                    format.ToVideoFormat().Codec == VideoCodecsEnum.H265 ||
+                    format.ToVideoFormat().Codec == VideoCodecsEnum.JPEG)
                 {
-                    logger.LogDebug($"Video depacketisation codec set to {format.ToVideoFormat().Codec} for SSRC {packet.Header.SyncSource}.");
+                    logger.LogDebug("Video depacketisation codec set to {Codec} for SSRC {SSRC}.", format.ToVideoFormat().Codec, packet.Header.SyncSource);
 
                     RtpVideoFramer = new RtpVideoFramer(format.ToVideoFormat().Codec, MaxReconstructedVideoFrameSize);
 
@@ -306,12 +363,10 @@ namespace SIPSorcery.net.RTP
                 }
                 else
                 {
-                    logger.LogWarning($"Video depacketisation logic for codec {format.Name()} has not been implemented, PR's welcome!");
+                    logger.LogWarning("Video depacketisation logic for codec {CodecName} has not been implemented, PR's welcome!", format.Name());
                 }
             }
         }
-
-        #endregion RECEIVE PACKET
 
         public void CheckVideoFormatsNegotiation()
         {
@@ -327,7 +382,7 @@ namespace SIPSorcery.net.RTP
         public VideoStream(RtpSessionConfig config, int index) : base(config, index)
         {
             MediaType = SDPMediaTypesEnum.video;
-            RemoteRtpEventPayloadID = 0;
+            NegotiatedRtpEventPayloadID = 0;
         }
     }
 }

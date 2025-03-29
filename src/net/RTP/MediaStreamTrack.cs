@@ -20,7 +20,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.Logging;
-using SIPSorcery.net.RTP;
 using SIPSorcery.Sys;
 using SIPSorceryMedia.Abstractions;
 
@@ -191,6 +190,18 @@ namespace SIPSorcery.Net
         }
 
         /// <summary>
+        /// Add a local text track.
+        /// </summary>
+        /// <param name="format">The text format that the local application supports.</param>
+        /// <param name="streamStatus">Optional. The stream status for the text track, e.g. whether
+        /// send and receive or only one of.</param>
+        public MediaStreamTrack(
+            TextFormat format,
+            MediaStreamStatusEnum streamStatus = MediaStreamStatusEnum.SendRecv) :
+            this (SDPMediaTypesEnum.text, false, new List<SDPAudioVideoMediaFormat> { new SDPAudioVideoMediaFormat(format)}, streamStatus)
+        { }
+
+        /// <summary>
         /// Add a local audio track.
         /// </summary>
         /// <param name="format">The audio format that the local application supports.</param>
@@ -321,7 +332,7 @@ namespace SIPSorcery.Net
         /// </summary>
         /// <param name="audioFormat">The Audio Format to restrict</param>
         /// <returns>True if the operation has been performed</returns>
-        public Boolean RestrictCapabilities(AudioFormat audioFormat)
+        public bool RestrictCapabilities(AudioFormat audioFormat)
         {
             return RestrictCapabilities(new SDPAudioVideoMediaFormat(audioFormat));
         }        
